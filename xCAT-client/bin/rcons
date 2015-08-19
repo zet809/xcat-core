@@ -55,8 +55,8 @@ fi
 # confluent if this keyword is defined in the site table.  This allows for confluent to 
 # be installed on the xCAT management node and switch between conserver & confluent
 USE_CONFLUENT=0
-CONSOLE_SERVICE_KEYWORD=`tabdump site | grep consoleservice | cut -d, -f1 | tr -d '"'`
-CONSOLE_SERVICE_VALUE=`tabdump site | grep consoleservice | cut -d, -f2 | tr -d '"'`
+CONSOLE_SERVICE_KEYWORD=`/opt/xcat/sbin/tabdump site | grep consoleservice | cut -d, -f1 | tr -d '"'`
+CONSOLE_SERVICE_VALUE=`/opt/xcat/sbin/tabdump site | grep consoleservice | cut -d, -f2 | tr -d '"'`
 
 if [ "$CONSOLE_SERVICE_KEYWORD" == "consoleservice" ]; then
     if [ "$CONSOLE_SERVICE_VALUE" == "confluent" ]; then
