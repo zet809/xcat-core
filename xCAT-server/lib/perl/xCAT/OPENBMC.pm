@@ -21,12 +21,14 @@ use JSON;
 use File::Path;
 use Fcntl ":flock";
 use IO::Socket::UNIX qw( SOCK_STREAM );
+use xCAT_monitoring::monitorctrl;
 
 my $LOCK_DIR = "/var/lock/xcat/";
 my $LOCK_PATH = "/var/lock/xcat/agent.lock";
 my $AGENT_SOCK_PATH = "/var/run/xcat/agent.sock";
 my $PYTHON_LOG_PATH = "/var/log/xcat/agent.log";
 my $MSG_TYPE = "message";
+my $DB_TYPE = "db";
 my $lock_fd;
 
 my $header = HTTP::Headers->new('Content-Type' => 'application/json');
@@ -103,6 +105,12 @@ sub handle_message {
             xCAT::MsgUtils->message("E", { data => [$msg->{data}] }, $callback);
         } elsif ($msg->{type} eq 'syslog'){
             xCAT::MsgUtils->message("S", $msg->{data});
+        }
+    } elsif ($data->{type} eq $DB_TYPE) {
+        my $attribute = $data->{attribute};
+        if ($attribute->{name} eq 'status' and $attribute->{method} eq 'set' and $attribute->{type} eq 'node') {
+             my %new_status = ($attribute->{value} => [$attribute->{node}]);
+             xCAT_monitoring::monitorctrl::setNodeStatusAttributes(\%new_status, 1)
         }
     }
 }

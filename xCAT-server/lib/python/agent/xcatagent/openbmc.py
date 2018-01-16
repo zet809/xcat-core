@@ -1,6 +1,7 @@
 from xcatagent import base
 import time
 import sys
+import gevent
 
 import xcat_exception
 import rest
@@ -52,6 +53,14 @@ RPOWER_STATE = {
     "Quiesced"  : "quiesced",
 }
 
+POWER_STATE_DB = {
+    "on"      : "powering-on",
+    "off"     : "powering-off",
+    "softoff" : "powering-off",
+    "boot"    : "powering-on",
+    "reset"   : "powering-on",
+}
+
 class OpenBMC(base.BaseDriver):
 
     headers = {'Content-Type': 'application/json'}
@@ -64,7 +73,6 @@ class OpenBMC(base.BaseDriver):
         global DEBUGMODE
         self.client = rest.RestSession(messager, DEBUGMODE)
 
-
     def _login(self) :
         """ Login
         :raise: error message if failed
@@ -74,11 +82,10 @@ class OpenBMC(base.BaseDriver):
         self.client.request('POST', url, OpenBMC.headers, data, self.node, 'login')
         return RESULT_OK
 
-
     def _set_power_onoff(self, subcommand) :
         """ Set power on/off/softoff/bmcreboot
         :param subcommand: subcommand for rpower
-        :returns: on/off/softoff/BMC reboot if success
+        :returns: ok if success
         :raise: error message if failed
         """
         url = HTTP_PROTOCOL + self.bmcip + RPOWER_URLS[subcommand]['url']
@@ -92,7 +99,6 @@ class OpenBMC(base.BaseDriver):
             return result
 
         return RESULT_OK
-
 
     def _get_power_state(self, subcommand) :
         """ Get power current state
@@ -154,17 +160,18 @@ class OpenBMC(base.BaseDriver):
         result = self._set_power_onoff('off')
         if result != RESULT_OK :
             return result
+        self.messager.update_node_attributes('status', self.node, POWER_STATE_DB['off'])
 
         start_timeStamp = int(time.time())
         for i in range (0,30) :
             status = self._get_power_state('state')
-            if status in RPOWER_STATE.keys() and RPOWER_STATE[status] == 'off':
+            if status in RPOWER_STATE and RPOWER_STATE[status] == 'off':
                 break
             gevent.sleep( 2 )
 
         end_timeStamp = int(time.time())
 
-        if status not in RPOWER_STATE.keys() or RPOWER_STATE[status] != 'off':
+        if status not in RPOWER_STATE or RPOWER_STATE[status] != 'off':
             wait_time = str(end_timeStamp - start_timeStamp)
             result = 'Error: Sent power-off command but state did not change to off after waiting ' + wait_time + ' seconds. (State=' + status + ').'
             return result
@@ -182,32 +189,32 @@ class OpenBMC(base.BaseDriver):
             result = self._login()
         except xcat_exception.SelfServerException as e :
             if subcommand == 'bmcstate' :
-                result = self.node + ': ' + RPOWER_STATE[Notready]
+                result = '%s: %s' % (self.node, RPOWER_STATE['NotReady'])
             else :
-                result = self.node + ': ' + e.message
+                result = '%s: %s'  % (self.node, e.message)
         except xcat_exception.SelfClientException as e :
-            result = self.node + ': ' + e.message 
+            result = '%s: %s'  % (self.node, e.message)
 
         if result != RESULT_OK :
             self.messager.info(result)
+            self._update2Ddict(node_rst, self.node, 'rst', result)
             return
-
+        new_status = ''
         if subcommand in POWER_SET_OPTIONS :
             result = self._set_power_onoff(subcommand)
             if result == RESULT_OK :
                 result = RPOWER_STATE[subcommand]
+                new_status = POWER_STATE_DB.get(subcommand, '')
 
         if subcommand in POWER_GET_OPTIONS :
             tmp_result = self._get_power_state(subcommand)
-            if tmp_result in RPOWER_STATE.keys() :
-                result = RPOWER_STATE[tmp_result]
-            else :
-                result = tmp_result
+            result = RPOWER_STATE.get(tmp_result, tmp_result)
 
         if subcommand == 'boot' :
             result = self._rpower_boot()
             if result == RESULT_OK :
                 result = RPOWER_STATE[subcommand]
+                new_status = POWER_STATE_DB.get(subcommand, '')
 
         if subcommand == 'reset' :
             status = self._get_power_state('state')
@@ -217,10 +224,12 @@ class OpenBMC(base.BaseDriver):
                 result = self._rpower_boot()
                 if result == RESULT_OK :
                     result = RPOWER_STATE[subcommand]
+                    new_status = POWER_STATE_DB.get(subcommand, '')
 
-        message = self.node + ": " + result
+        message = '%s: %s' % (self.node, result)
         self.messager.info(message)
-
+        if new_status :
+            self.messager.update_node_attributes('status', self.node, new_status)
 
 class OpenBMCManager(base.BaseManager):
     def __init__(self, messager, cwd, nodes, envs):
