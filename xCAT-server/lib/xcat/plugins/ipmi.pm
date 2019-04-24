@@ -2464,9 +2464,10 @@ sub rflash {
                 my $c_id          = ${ $sessdata->{component_ids} }[$i];
                 my $version       = $firmware_version{$c_id};
                 my $format_string = $comp_string{$c_id};
-                my $format_ver    = sprintf("%3d.%02x.%d",
+                my $format_ver    = sprintf("%3d.%02x %02X%02X%02X%02X",
                     $version->[0], $version->[1],
-                    $version->[5]*0x1000000 +$version->[4]*0x10000+ $version->[3]*0x100+$version->[2]);
+                    $version->[2], $version->[3],
+                    $version->[4], $version->[5]);
                 $msg = $msg . $sessdata->{node} . ": " .
 "Node firmware version for $format_string component: $format_ver";
                 if ($i != scalar(@{ $sessdata->{component_ids} }) - 1) {
